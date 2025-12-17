@@ -1,4 +1,7 @@
 # Tesla Vehicle Command SDK
+
+> **Autolane Fork** - This fork adds `tesla-http-proxy-insecure`, an HTTP-only proxy for deployment behind TLS-terminating infrastructure (Cloud Run, nginx, Traefik, K8s ingress). See [Autolane Changes](#autolane-changes) below.
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/teslamotors/vehicle-command/pkg.svg)](https://pkg.go.dev/github.com/teslamotors/vehicle-command/pkg)
 [![Build and Test](https://github.com/teslamotors/vehicle-command/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/teslamotors/vehicle-command/actions/workflows/build.yml)
 [![Current Version](https://img.shields.io/github/v/tag/teslamotors/vehicle-command?label=latest%20tag)](https://github.com/teslamotors/vehicle-command/tags)
@@ -321,3 +324,65 @@ You can read package [documentation on pkg.go.dev](https://pkg.go.dev/github.com
 This repository supports `go mod` and follows [Go version
 semantics](https://go.dev/doc/modules/version-numbers). Note that v0.x.x
 releases do not guarantee API stability.
+
+---
+
+## Autolane Changes
+
+This fork adds **tesla-http-proxy-insecure**, an HTTP-only proxy designed for deployment behind TLS-terminating infrastructure such as Google Cloud Run, nginx, Traefik, or Kubernetes ingress controllers.
+
+### Why HTTP-only?
+
+Modern cloud platforms like Google Cloud Run handle TLS termination at the edge, meaning your container receives plain HTTP traffic over a secure internal network. The standard `tesla-http-proxy` requires TLS certificates, which is redundant and complicates deployment in these environments.
+
+### Installation
+
+```bash
+go install ./cmd/tesla-http-proxy-insecure
+```
+
+### Usage
+
+```bash
+# With key file
+tesla-http-proxy-insecure --key-file private_key.pem --host 0.0.0.0 --port 8080
+
+# With environment variables
+export TESLA_KEY_FILE=/path/to/private_key.pem
+export TESLA_HTTP_PROXY_HOST=0.0.0.0
+export TESLA_HTTP_PROXY_PORT=8080
+tesla-http-proxy-insecure
+```
+
+### Configuration
+
+| Flag | Environment Variable | Default | Description |
+|------|---------------------|---------|-------------|
+| `--key-file` | `TESLA_KEY_FILE` | - | Private key file path |
+| `--key-name` | `TESLA_KEY_NAME` | - | Keyring entry name |
+| `--host` | `TESLA_HTTP_PROXY_HOST` | localhost | Bind address |
+| `--port` | `TESLA_HTTP_PROXY_PORT` | 8080 | Listen port |
+| `--timeout` | `TESLA_HTTP_PROXY_TIMEOUT` | 10s | Command timeout |
+| `--verbose` | `TESLA_VERBOSE` | false | Debug logging |
+
+### Cloud Run Deployment
+
+A Dockerfile is provided at `cmd/tesla-http-proxy-insecure/Dockerfile`:
+
+```bash
+# Build and deploy
+gcloud builds submit --tag gcr.io/PROJECT_ID/tesla-http-proxy-insecure
+gcloud run deploy tesla-http-proxy-insecure \
+  --image gcr.io/PROJECT_ID/tesla-http-proxy-insecure \
+  --port 8080 \
+  --min-instances 1 \
+  --set-secrets="/secrets/fleet-key.pem=tesla-fleet-key:latest" \
+  --set-env-vars="TESLA_KEY_FILE=/secrets/fleet-key.pem,TESLA_HTTP_PROXY_HOST=0.0.0.0"
+```
+
+### Security Notes
+
+- This proxy does **NOT** encrypt client traffic
+- Use only behind TLS-terminating infrastructure
+- The proxy still uses HTTPS for outbound Tesla API calls
+- Add client authentication in production (OAuth, API keys, IAM)
